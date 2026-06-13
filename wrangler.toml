@@ -10,11 +10,13 @@ binding = "SKILLS_KV"
 id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 preview_id = "yyyyyyyyyyyyyyyyyyyyyyyyyyyy"
 
-# 环境变量（可通过 wrangler secret 覆盖敏感值）
+# 环境变量
 [vars]
-SERVER_NAME = "skills-mcp"
-SERVER_VERSION = "1.0.0"
-KV_PREFIX = "skill:"
-KV_LIST_KEY = "skills:registry"
-WEREAD_BASE_URL = "https://weread.qq.com"
-# WEREAD_COOKIE = ""  # 敏感信息，建议用 wrangler secret put WEREAD_COOKIE
+# MCP 端点 Bearer Token 鉴权（建议用 wrangler secret put 设置）
+# MCP_AUTH_TOKEN = ""
+
+# Vercel npx 执行器地址（可选，配置后自动转发 npx 命令）
+# VERCEL_EXECUTOR_URL = ""
+
+# 微信读书 Cookie（敏感信息，建议用 wrangler secret put WEREAD_COOKIE）
+# WEREAD_COOKIE = ""

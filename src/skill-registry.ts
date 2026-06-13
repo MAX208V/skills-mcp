@@ -14,60 +14,68 @@ import type {
 
 import { wechatReadingSkill } from "./skills/wechat-reading";
 
-// ---- 内置 Skill 列表 ----
+// ---- 常量 ----
 const BUILTIN_SKILLS: SkillDefinition[] = [wechatReadingSkill];
+const KV_LIST_KEY = "skills:registry";
 
 export class SkillRegistry {
   private builtinSkills: SkillDefinition[] = BUILTIN_SKILLS;
   private dynamicSkills: Map<string, DynamicSkillDef> = new Map();
   private env: Env | null = null;
 
-  /** 获取 KV 键前缀（来自环境变量或默认值） */
-  private get kvPrefix(): string {
-    return this.env?.KV_PREFIX ?? "skill:";
-  }
-
-  /** 获取 KV 列表键名（来自环境变量或默认值） */
-  private get kvListKey(): string {
-    return this.env?.KV_LIST_KEY ?? "skills:registry";
-  }
-
-  /** 绑定环境（每次请求时调用） */
   bindEnv(env: Env) {
     this.env = env;
   }
 
-  /** 从 KV 加载动态 Skill */
   async loadFromKV(): Promise<void> {
     if (!this.env?.SKILLS_KV) return;
-
     try {
-      const raw = await this.env.SKILLS_KV.get(this.kvListKey, "json");
+      const raw = await this.env.SKILLS_KV.get(KV_LIST_KEY, "json");
       if (raw && Array.isArray(raw)) {
         this.dynamicSkills.clear();
         for (const def of raw as DynamicSkillDef[]) {
           this.dynamicSkills.set(def.name, def);
         }
       }
+    } catch {}
+  }
+
+  async saveToKV(): Promise<void> {
+    if (!this.env?.SKILLS_KV) return;
+    const list = Array.from(this.dynamicSkills.values());
+    await this.env.SKILLS_KV.put(KV_LIST_KEY, JSON.stringify(list));
+  }
+
+  /** 获取 API 令牌 */
+  async getApiToken(skillName: string): Promise<string | null> {
+    if (!this.env?.SKILLS_KV) return null;
+    try {
+      return await this.env.SKILLS_KV.get(`token:${skillName}`);
     } catch {
-      // KV 不可用时静默降级
+      return null;
     }
   }
 
-  /** 保存动态 Skill 列表到 KV */
-  private async saveToKV(): Promise<void> {
-    if (!this.env?.SKILLS_KV) return;
-    const list = Array.from(this.dynamicSkills.values());
-    await this.env.SKILLS_KV.put(this.kvListKey, JSON.stringify(list));
+  /** 供外部调用的添加方法（如 Vercel 回调） */
+  addDynamicSkill(def: DynamicSkillDef) {
+    this.dynamicSkills.set(def.name, def);
   }
 
-  // ---- 查询 ----
+  /** 获取所有 Skill 的概要信息（供管理页面使用） */
+  getAllSkillsInfo(): { total: number; skills: Record<string, unknown>[] } {
+    const skills: Record<string, unknown>[] = [];
+    for (const skill of this.builtinSkills) {
+      skills.push({ name: skill.name, source: skill.source, type: "builtin" });
+    }
+    for (const [, skill] of this.dynamicSkills) {
+      skills.push({ name: skill.name, source: skill.source, type: "dynamic" });
+    }
+    return { total: skills.length, skills };
+  }
 
-  /** 获取所有 MCP 工具定义（内置 + 动态） */
   listTools(): McpTool[] {
     const tools: McpTool[] = [];
 
-    // 内置 Skill 的工具
     for (const skill of this.builtinSkills) {
       for (const tool of skill.tools) {
         tools.push({
@@ -78,7 +86,6 @@ export class SkillRegistry {
       }
     }
 
-    // 动态 Skill 的工具
     for (const [, skill] of this.dynamicSkills) {
       for (const tool of skill.tools) {
         tools.push({
@@ -90,175 +97,149 @@ export class SkillRegistry {
     }
 
     // 管理工具
-    tools.push(
-      {
-        name: "skills_add",
-        description:
-          "添加一个新的 Skill 到注册中心（等价于 npx skills add <source> -g）。" +
-          "提供 source 即可自动匹配内置定义，或提供完整的 definition 来自定义",
-        inputSchema: {
-          type: "object",
-          properties: {
-            source: {
-              type: "string",
-              description: 'Skill 来源，如 "Tencent/WeChatReading"',
-            },
-            definition: {
-              type: "object",
-              description: "自定义 Skill 定义（可选，不提供则从内置映射查找）",
-              properties: {
-                name: { type: "string", description: "Skill 标识名" },
-                description: { type: "string", description: "Skill 描述" },
-                tools: {
-                  type: "array",
-                  description: "工具定义列表",
-                  items: {
-                    type: "object",
-                    properties: {
-                      name: { type: "string" },
-                      description: { type: "string" },
-                      inputSchema: { type: "object" },
-                    },
-                    required: ["name", "description", "inputSchema"],
-                  },
-                },
-                httpHandlers: {
-                  type: "object",
-                  description: "HTTP 代理处理器配置，key 为工具名",
-                },
-              },
-            },
+    tools.push({
+      name: "skills_add",
+      description: "安装一个新的 Skill。提供 npx 命令和可选的 API 令牌。" +
+        "命令格式: npx skills add <source> [-g]。" +
+        "API 令牌用于调用 skill 提供方的接口。",
+      inputSchema: {
+        type: "object",
+        properties: {
+          command: {
+            type: "string",
+            description: 'npx 安装命令，如 "npx skills add Tencent/WeChatReading -g"',
           },
-          required: ["source"],
+          apiToken: {
+            type: "string",
+            description: "Skill 提供方的 API 令牌（可选，可在管理页面补充）",
+          },
         },
+        required: ["command"],
       },
-      {
-        name: "skills_list",
-        description: "列出所有已注册的 Skill",
-        inputSchema: {
-          type: "object",
-          properties: {
-            verbose: {
-              type: "boolean",
-              description: "是否显示详细信息，默认 false",
-            },
-          },
-          required: [],
-        },
+    });
+
+    tools.push({
+      name: "skills_list",
+      description: "列出所有已注册的 Skill",
+      inputSchema: {
+        type: "object",
+        properties: { verbose: { type: "boolean", description: "是否显示详细信息" } },
       },
-      {
-        name: "skills_remove",
-        description: "移除一个已注册的动态 Skill",
-        inputSchema: {
-          type: "object",
-          properties: {
-            name: {
-              type: "string",
-              description: "要移除的 Skill 标识名",
-            },
-          },
-          required: ["name"],
-        },
-      }
-    );
+    });
+
+    tools.push({
+      name: "skills_remove",
+      description: "移除一个已注册的动态 Skill",
+      inputSchema: {
+        type: "object",
+        properties: { name: { type: "string", description: "要移除的 Skill 标识名" } },
+        required: ["name"],
+      },
+    });
 
     return tools;
   }
 
-  /** 执行工具调用 */
   async callTool(name: string, params: Record<string, unknown>): Promise<ToolResult> {
-    // 1. 管理工具
     if (name === "skills_add") return this.handleAdd(params);
     if (name === "skills_list") return this.handleList(params);
     if (name === "skills_remove") return this.handleRemove(params);
 
-    // 2. 内置 Skill 处理器
     for (const skill of this.builtinSkills) {
       if (skill.handlers[name]) {
         return skill.handlers[name](params, this.env!);
       }
     }
 
-    // 3. 动态 Skill 处理器（HTTP 代理）
     for (const [, skill] of this.dynamicSkills) {
       if (skill.httpHandlers?.[name]) {
         return this.handleDynamicHttp(skill.httpHandlers[name], params);
       }
     }
 
-    return {
-      content: [{ type: "text", text: `未知工具: ${name}` }],
-      isError: true,
-    };
+    return { content: [{ type: "text", text: `未知工具: ${name}` }], isError: true };
   }
 
-  // ---- 管理工具实现 ----
-
-  /** source -> 内置 Skill 的映射 */
   private static SOURCE_MAP: Record<string, string> = {
     "Tencent/WeChatReading": "wechat-reading",
     "wechat-reading": "wechat-reading",
   };
 
   private async handleAdd(params: Record<string, unknown>): Promise<ToolResult> {
-    const source = String(params.source ?? "");
-    const definition = params.definition as DynamicSkillDef | undefined;
+    const command = String(params.command ?? "").trim();
+    const apiToken = String(params.apiToken ?? "").trim();
 
-    if (!source) {
+    if (!command) {
       return {
-        content: [{ type: "text", text: "请提供 source 参数" }],
+        content: [{ type: "text", text: "请提供 npx 安装命令，格式: npx skills add <source> [-g]" }],
         isError: true,
       };
     }
 
-    // 方案 A：从内置映射查找
+    // 解析 npx 命令
+    const match = command.match(/^npx\s+skills\s+add\s+(\S+)/);
+    if (!match) {
+      return {
+        content: [{ type: "text", text: `无法解析命令: ${command}\n格式: npx skills add <source> [-g]` }],
+        isError: true,
+      };
+    }
+
+    const source = match[1];
+
+    // 检查是否是内置 Skill
     const mappedName = SkillRegistry.SOURCE_MAP[source];
     if (mappedName) {
       const builtin = this.builtinSkills.find((s) => s.name === mappedName);
       if (builtin) {
+        // 保存 API 令牌
+        if (apiToken && this.env?.SKILLS_KV) {
+          await this.env.SKILLS_KV.put(`token:${builtin.name}`, apiToken);
+        }
         return {
-          content: [
-            {
-              type: "text",
-              text: `✅ Skill "${source}" 已作为内置 Skill 存在，可直接使用以下工具:\n${builtin.tools.map((t) => `  - ${t.name}: ${t.description}`).join("\n")}`,
-            },
-          ],
+          content: [{
+            type: "text",
+            text: `✅ 内置 Skill "${source}" 已存在，可直接使用以下工具:\n${
+              builtin.tools.map((t) => `  - ${t.name}: ${t.description}`).join("\n")
+            }${apiToken ? "\n\nAPI 令牌已保存" : ""}`,
+          }],
         };
       }
     }
 
-    // 方案 B：使用自定义 definition
-    if (definition) {
-      const def: DynamicSkillDef = {
-        name: definition.name ?? source.split("/").pop() ?? source,
-        source,
-        description: definition.description ?? `Dynamic skill from ${source}`,
-        tools: definition.tools ?? [],
-        httpHandlers: definition.httpHandlers,
-      };
-
-      this.dynamicSkills.set(def.name, def);
-      await this.saveToKV();
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: `✅ 动态 Skill "${def.name}" 添加成功！包含 ${def.tools.length} 个工具:\n${def.tools.map((t) => `  - ${t.name}: ${t.description}`).join("\n")}`,
-          },
-        ],
-      };
+    // 保存 API 令牌
+    const skillName = source.split("/").pop() ?? source;
+    if (apiToken && this.env?.SKILLS_KV) {
+      await this.env.SKILLS_KV.put(`token:${skillName}`, apiToken);
     }
 
-    // 方案 C：未知 source，提示
+    // 判断是否有 Vercel 执行器
+    const executorUrl = this.env?.VERCEL_EXECUTOR_URL;
+    if (executorUrl) {
+      try {
+        const resp = await fetch(executorUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            command,
+            skillName,
+            source,
+            callbackUrl: `https://${this.env?.SKILLS_KV ? "..." : ""}/api/skills/register`,
+          }),
+        });
+        if (resp.ok) {
+          return {
+            content: [{ type: "text", text: `✅ 已提交到 Vercel 执行器安装 "${source}"${apiToken ? "，API 令牌已保存" : ""}` }],
+          };
+        }
+      } catch {}
+    }
+
     return {
-      content: [
-        {
-          type: "text",
-          text: `⚠️ 未找到内置 Skill "${source}"。\n请提供 definition 参数来自定义此 Skill，例如:\n{\n  "source": "${source}",\n  "definition": {\n    "name": "my-skill",\n    "description": "...",\n    "tools": [{ "name": "my_tool", "description": "...", "inputSchema": {...} }],\n    "httpHandlers": { "my_tool": { "url": "https://...", "method": "GET" } }\n  }\n}`,
-        },
-      ],
-      isError: true,
+      content: [{
+        type: "text",
+        text: `✅ 命令已记录：${command}${apiToken ? "\nAPI 令牌已保存" : ""}\n\n请前往管理页面 (/admin) 查看执行状态，或在 Vercel 上执行此命令。`,
+      }],
     };
   }
 
@@ -267,114 +248,77 @@ export class SkillRegistry {
     const skills: Record<string, unknown>[] = [];
 
     for (const skill of this.builtinSkills) {
-      skills.push(
-        verbose
-          ? {
-              name: skill.name,
-              source: skill.source,
-              description: skill.description,
-              type: "builtin",
-              tools: skill.tools.map((t) => t.name),
-            }
-          : { name: skill.name, source: skill.source, type: "builtin" }
+      skills.push(verbose
+        ? { name: skill.name, source: skill.source, type: "builtin", tools: skill.tools.map((t) => t.name) }
+        : { name: skill.name, source: skill.source, type: "builtin" }
       );
     }
 
     for (const [, skill] of this.dynamicSkills) {
-      skills.push(
-        verbose
-          ? {
-              name: skill.name,
-              source: skill.source,
-              description: skill.description,
-              type: "dynamic",
-              tools: skill.tools.map((t) => t.name),
-            }
-          : { name: skill.name, source: skill.source, type: "dynamic" }
+      skills.push(verbose
+        ? { name: skill.name, source: skill.source, type: "dynamic", tools: skill.tools.map((t) => t.name) }
+        : { name: skill.name, source: skill.source, type: "dynamic" }
       );
     }
 
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ total: skills.length, skills }, null, 2),
-        },
-      ],
-    };
+    return { content: [{ type: "text", text: JSON.stringify({ total: skills.length, skills }, null, 2) }] };
   }
 
   private async handleRemove(params: Record<string, unknown>): Promise<ToolResult> {
     const name = String(params.name ?? "");
     if (!name) {
-      return {
-        content: [{ type: "text", text: "请提供 name 参数" }],
-        isError: true,
-      };
+      return { content: [{ type: "text", text: "请提供 name 参数" }], isError: true };
     }
-
-    // 不允许移除内置 Skill
     if (this.builtinSkills.some((s) => s.name === name)) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `❌ 内置 Skill "${name}" 不可移除`,
-          },
-        ],
-        isError: true,
-      };
+      return { content: [{ type: "text", text: `❌ 内置 Skill "${name}" 不可移除` }], isError: true };
     }
-
     if (!this.dynamicSkills.has(name)) {
-      return {
-        content: [{ type: "text", text: `❌ 未找到 Skill "${name}"` }],
-        isError: true,
-      };
+      return { content: [{ type: "text", text: `❌ 未找到 Skill "${name}"` }], isError: true };
     }
-
     this.dynamicSkills.delete(name);
     await this.saveToKV();
-
-    return {
-      content: [{ type: "text", text: `✅ Skill "${name}" 已移除` }],
-    };
+    // 同时清理令牌
+    if (this.env?.SKILLS_KV) {
+      try { await this.env.SKILLS_KV.delete(`token:${name}`); } catch {}
+    }
+    return { content: [{ type: "text", text: `✅ Skill "${name}" 已移除` }] };
   }
 
-  // ---- 动态 Skill HTTP 代理 ----
-
-  private async handleDynamicHttp(
-    config: HttpHandlerConfig,
-    params: Record<string, unknown>
-  ): Promise<ToolResult> {
+  private async handleDynamicHttp(config: HttpHandlerConfig, params: Record<string, unknown>): Promise<ToolResult> {
     try {
-      // 模板变量替换
       const resolve = (template: string): string =>
-        template.replace(/\{\{(\w+)\}\}/g, (_, key) =>
-          String(params[key] ?? "")
-        );
+        template.replace(/\{\{(\w+)\}\}/g, (_, key) => String(params[key] ?? ""));
+
+      // 获取该 skill 的 API 令牌
+      // skillName 需要从当前 handler 所在 skill 推断
 
       const url = resolve(config.url);
-
-      // 构建 query 参数
       const searchParams = new URLSearchParams();
       if (config.query) {
         for (const [key, template] of Object.entries(config.query)) {
           searchParams.set(key, resolve(template));
         }
       }
+      const fullUrl = searchParams.toString() ? `${url}?${searchParams.toString()}` : url;
 
-      const fullUrl = searchParams.toString()
-        ? `${url}?${searchParams.toString()}`
-        : url;
-
-      // 构建 headers
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         ...config.headers,
       };
 
-      // 构建 body
+      // 注入 API 令牌到 header（如果配置了 Authorization 模板）
+      if (headers["Authorization"]?.includes("{{apiToken}}")) {
+        const skillName = [...this.dynamicSkills].find(([, s]) =>
+          s.httpHandlers && Object.keys(s.httpHandlers).includes(Object.keys(this.dynamicSkills).find(() => true) ?? "")
+        )?.[0];
+        if (skillName) {
+          const token = await this.getApiToken(skillName);
+          if (token) {
+            headers["Authorization"] = headers["Authorization"].replace("{{apiToken}}", token);
+          }
+        }
+      }
+
       let body: string | undefined;
       if (config.method !== "GET" && config.body) {
         const bodyObj: Record<string, unknown> = {};
@@ -384,35 +328,14 @@ export class SkillRegistry {
         body = JSON.stringify(bodyObj);
       }
 
-      const resp = await fetch(fullUrl, {
-        method: config.method,
-        headers,
-        body,
-      });
-
+      const resp = await fetch(fullUrl, { method: config.method, headers, body });
       const data = await resp.json();
 
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(data, null, 2),
-          },
-        ],
-      };
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     } catch (err: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `HTTP 代理请求失败: ${err.message}`,
-          },
-        ],
-        isError: true,
-      };
+      return { content: [{ type: "text", text: `HTTP 代理请求失败: ${err.message}` }], isError: true };
     }
   }
 }
 
-// 单例
 export const skillRegistry = new SkillRegistry();

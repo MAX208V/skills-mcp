@@ -6,11 +6,10 @@
 export interface Env {
   SKILLS_KV: KVNamespace;
   WEREAD_COOKIE?: string;
-  SERVER_NAME?: string;
-  SERVER_VERSION?: string;
-  KV_PREFIX?: string;
-  KV_LIST_KEY?: string;
-  WEREAD_BASE_URL?: string;
+  /** MCP 端点 Bearer Token 鉴权 */
+  MCP_AUTH_TOKEN?: string;
+  /** Vercel npx 执行器的 URL（可选，配置后自动转发 npx 命令） */
+  VERCEL_EXECUTOR_URL?: string;
 }
 
 // ---- MCP 协议类型 ----
@@ -50,7 +49,7 @@ export interface ToolInputSchema {
 
 /** Skill 中暴露的工具定义 */
 export interface SkillToolDef {
-  name: string;           // 工具名，建议 {skill}_{action} 如 wechat_reading_search
+  name: string;
   description: string;
   inputSchema: ToolInputSchema;
 }
@@ -75,15 +74,10 @@ export type ToolHandler = (
 
 /** Skill 定义（内置） */
 export interface SkillDefinition {
-  /** Skill 唯一标识，如 "wechat-reading" */
   name: string;
-  /** 来源，如 "Tencent/WeChatReading" */
   source: string;
-  /** 描述 */
   description: string;
-  /** 暴露的工具列表 */
   tools: SkillToolDef[];
-  /** 工具处理器映射：toolName -> handler */
   handlers: Record<string, ToolHandler>;
 }
 
@@ -93,22 +87,20 @@ export interface DynamicSkillDef {
   source: string;
   description: string;
   tools: SkillToolDef[];
-  /** HTTP 代理配置：toolName -> HttpHandlerConfig */
   httpHandlers?: Record<string, HttpHandlerConfig>;
 }
 
 /** HTTP 代理处理器配置 */
 export interface HttpHandlerConfig {
-  url: string;                    // 支持 {{param}} 模板变量
+  url: string;
   method: "GET" | "POST" | "PUT" | "DELETE";
   headers?: Record<string, string>;
-  query?: Record<string, string>; // GET 参数模板
-  body?: Record<string, string>;  // POST body 模板
-  responsePath?: string;          // JSONPath 简化提取
+  query?: Record<string, string>;
+  body?: Record<string, string>;
+  responsePath?: string;
 }
 
-// ---- MCP 工具列表中展示的格式 ----
-
+/** MCP 工具列表中展示的格式 */
 export interface McpTool {
   name: string;
   description: string;
