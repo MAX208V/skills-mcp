@@ -9,9 +9,10 @@ import type { SkillDefinition, Env, ToolResult } from "../types";
 async function wereadFetch(
   path: string,
   cookie: string,
+  baseUrl: string,
   options: { method?: string; body?: unknown } = {}
 ): Promise<unknown> {
-  const url = `https://weread.qq.com${path}`;
+  const url = `${baseUrl}${path}`;
   const resp = await fetch(url, {
     method: options.method ?? "GET",
     headers: {
@@ -140,6 +141,7 @@ export const wechatReadingSkill: SkillDefinition = {
     wechat_reading_search: async (params, env: Env) => {
       const query = String(params.query ?? "");
       const maxResults = Number(params.maxResults ?? 10);
+      const baseUrl = env.WEREAD_BASE_URL ?? "https://weread.qq.com";
 
       if (!query.trim()) {
         return {
@@ -164,7 +166,8 @@ export const wechatReadingSkill: SkillDefinition = {
       try {
         const data = (await wereadFetch(
           `/api/web/search?query=${encodeURIComponent(query)}`,
-          cookie
+          cookie,
+          baseUrl
         )) as any;
 
         const books = (data?.books ?? data?.results ?? [])
@@ -204,6 +207,7 @@ export const wechatReadingSkill: SkillDefinition = {
     wechat_reading_book_detail: async (params, env: Env) => {
       const bookId = String(params.bookId ?? "");
       const cookie = env.WEREAD_COOKIE ?? "";
+      const baseUrl = env.WEREAD_BASE_URL ?? "https://weread.qq.com";
 
       if (!cookie) {
         return {
@@ -217,7 +221,8 @@ export const wechatReadingSkill: SkillDefinition = {
       try {
         const data = (await wereadFetch(
           `/api/web/book/info?bookId=${encodeURIComponent(bookId)}`,
-          cookie
+          cookie,
+          baseUrl
         )) as any;
 
         return {
@@ -259,6 +264,7 @@ export const wechatReadingSkill: SkillDefinition = {
       const bookId = String(params.bookId ?? "");
       const limit = Number(params.limit ?? 20);
       const cookie = env.WEREAD_COOKIE ?? "";
+      const baseUrl = env.WEREAD_BASE_URL ?? "https://weread.qq.com";
 
       if (!cookie) {
         return {
@@ -272,7 +278,8 @@ export const wechatReadingSkill: SkillDefinition = {
       try {
         const data = (await wereadFetch(
           `/api/web/book/highlights?bookId=${encodeURIComponent(bookId)}&limit=${limit}`,
-          cookie
+          cookie,
+          baseUrl
         )) as any;
 
         const highlights = (data?.highlights ?? data?.items ?? [])
@@ -310,6 +317,7 @@ export const wechatReadingSkill: SkillDefinition = {
       const bookId = String(params.bookId ?? "");
       const limit = Number(params.limit ?? 10);
       const cookie = env.WEREAD_COOKIE ?? "";
+      const baseUrl = env.WEREAD_BASE_URL ?? "https://weread.qq.com";
 
       if (!cookie) {
         return {
@@ -323,7 +331,8 @@ export const wechatReadingSkill: SkillDefinition = {
       try {
         const data = (await wereadFetch(
           `/api/web/review/list?bookId=${encodeURIComponent(bookId)}&listType=6&maxIdx=0&count=${limit}`,
-          cookie
+          cookie,
+          baseUrl
         )) as any;
 
         const reviews = (data?.reviews ?? data?.items ?? [])
@@ -361,6 +370,7 @@ export const wechatReadingSkill: SkillDefinition = {
     wechat_reading_recommend: async (params, env: Env) => {
       const category = String(params.category ?? "");
       const cookie = env.WEREAD_COOKIE ?? "";
+      const baseUrl = env.WEREAD_BASE_URL ?? "https://weread.qq.com";
 
       if (!cookie) {
         return {
@@ -375,7 +385,7 @@ export const wechatReadingSkill: SkillDefinition = {
         const path = category
           ? `/api/web/category/books?category=${encodeURIComponent(category)}`
           : `/api/web/recommend`;
-        const data = (await wereadFetch(path, cookie)) as any;
+        const data = (await wereadFetch(path, cookie, baseUrl)) as any;
 
         const books = (data?.books ?? data?.items ?? data?.list ?? [])
           .slice(0, 10)

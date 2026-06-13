@@ -17,14 +17,20 @@ import { wechatReadingSkill } from "./skills/wechat-reading";
 // ---- 内置 Skill 列表 ----
 const BUILTIN_SKILLS: SkillDefinition[] = [wechatReadingSkill];
 
-// KV 存储前缀
-const KV_PREFIX = "skill:";
-const KV_LIST_KEY = "skills:registry";
-
 export class SkillRegistry {
   private builtinSkills: SkillDefinition[] = BUILTIN_SKILLS;
   private dynamicSkills: Map<string, DynamicSkillDef> = new Map();
   private env: Env | null = null;
+
+  /** 获取 KV 键前缀（来自环境变量或默认值） */
+  private get kvPrefix(): string {
+    return this.env?.KV_PREFIX ?? "skill:";
+  }
+
+  /** 获取 KV 列表键名（来自环境变量或默认值） */
+  private get kvListKey(): string {
+    return this.env?.KV_LIST_KEY ?? "skills:registry";
+  }
 
   /** 绑定环境（每次请求时调用） */
   bindEnv(env: Env) {
@@ -36,7 +42,7 @@ export class SkillRegistry {
     if (!this.env?.SKILLS_KV) return;
 
     try {
-      const raw = await this.env.SKILLS_KV.get(KV_LIST_KEY, "json");
+      const raw = await this.env.SKILLS_KV.get(this.kvListKey, "json");
       if (raw && Array.isArray(raw)) {
         this.dynamicSkills.clear();
         for (const def of raw as DynamicSkillDef[]) {
@@ -52,7 +58,7 @@ export class SkillRegistry {
   private async saveToKV(): Promise<void> {
     if (!this.env?.SKILLS_KV) return;
     const list = Array.from(this.dynamicSkills.values());
-    await this.env.SKILLS_KV.put(KV_LIST_KEY, JSON.stringify(list));
+    await this.env.SKILLS_KV.put(this.kvListKey, JSON.stringify(list));
   }
 
   // ---- 查询 ----

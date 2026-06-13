@@ -14,8 +14,6 @@ import { skillRegistry } from "./skill-registry";
 // ---- 常量 ----
 
 const MCP_VERSION = "2025-03-26";
-const SERVER_NAME = "skills-mcp";
-const SERVER_VERSION = "1.0.0";
 
 // ---- JSON-RPC 错误码 ----
 
@@ -37,7 +35,8 @@ function generateSessionId(): string {
 
 async function handleInitialize(
   id: string | number | null,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  env: Env
 ): Promise<JsonRpcResponse> {
   const sessionId = generateSessionId();
   sessions.set(sessionId, { createdAt: Date.now() });
@@ -53,8 +52,8 @@ async function handleInitialize(
         },
       },
       serverInfo: {
-        name: SERVER_NAME,
-        version: SERVER_VERSION,
+        name: env.SERVER_NAME ?? "skills-mcp",
+        version: env.SERVER_VERSION ?? "1.0.0",
       },
       // 自定义：返回 session ID
       _meta: {
@@ -139,7 +138,7 @@ async function dispatch(request: JsonRpcRequest, env: Env): Promise<JsonRpcRespo
 
   switch (method) {
     case "initialize":
-      return handleInitialize(id ?? null, (params as Record<string, unknown>) ?? {});
+      return handleInitialize(id ?? null, (params as Record<string, unknown>) ?? {}, env);
 
     case "notifications/initialized":
       // 客户端通知，无需响应（但如果有 id，返回空结果）

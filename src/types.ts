@@ -6,6 +6,11 @@
 export interface Env {
   SKILLS_KV: KVNamespace;
   WEREAD_COOKIE?: string;
+  SERVER_NAME?: string;
+  SERVER_VERSION?: string;
+  KV_PREFIX?: string;
+  KV_LIST_KEY?: string;
+  WEREAD_BASE_URL?: string;
 }
 
 // ---- MCP 协议类型 ----

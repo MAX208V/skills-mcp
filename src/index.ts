@@ -15,7 +15,7 @@ export default {
         JSON.stringify(
           {
             name: "Skills MCP Server",
-            version: "1.0.0",
+            version: env.SERVER_VERSION ?? "1.0.0",
             protocolVersion: "2025-03-26",
             description: "可扩展的 Skills 基座 MCP Server",
             endpoints: {
