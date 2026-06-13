@@ -1,0 +1,18 @@
+{
+  "name": "skills-mcp",
+  "version": "1.0.0",
+  "description": "Skills Base MCP Server - 可扩展的 Skill 基座，通过 Cloudflare/Vercel 部署",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy:cf": "wrangler deploy",
+    "deploy:vercel": "vercel deploy --prod",
+    "cf-kv:create": "wrangler kv namespace create SKILLS_KV"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250523.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.14.0",
+    "vercel": "^41.0.0"
+  }
+}
