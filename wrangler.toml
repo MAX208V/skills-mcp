@@ -1,0 +1,17 @@
+name = "skills-mcp"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# KV 命名空间 —— 执行 `wrangler kv namespace create SKILLS_KV` 后填入 id
+[[kv_namespaces]]
+binding = "SKILLS_KV"
+id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+preview_id = "yyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+
+# 可选：微信读书 Cookie（通过环境变量注入，不硬编码）
+[vars]
+# WEREAD_COOKIE = ""
+
+# 敏感信息用 secrets
+# wrangler secret put WEREAD_COOKIE
